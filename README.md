@@ -1,18 +1,28 @@
-# Bitespeed Identity Reconciliation
+# Bitespeed Identity Reconciliation API
 
-API Endpoint:
+## Hosted Endpoint
+
+POST  
 https://bitespeed-api-2ovf.onrender.com/identify
 
-Method: POST
+---
 
-Body:
+## Overview
+
+This project implements an Identity Reconciliation API that links customer contacts based on shared email addresses and phone numbers.
+
+Customers may use different emails or phone numbers across purchases. This API identifies related contacts and returns a unified identity with primary and secondary contact relationships.
+
+---
+
+## Request Format
+
+Content-Type: application/json
+
+Example request:
+
+```json
 {
   "email": "doc@example.com",
   "phoneNumber": "123456"
 }
-
-Tech Stack:
-- Node.js
-- Express.js
-- PostgreSQL (Neon)
-- Render (Deployment)
