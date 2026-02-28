@@ -4,100 +4,110 @@ const { Pool } = require("pg");
 const app = express();
 app.use(express.json());
 
-// Replace with your Neon connection string
+/*
+DATABASE CONNECTION
+Render environment variable name = DATABASE_URL
+*/
 const pool = new Pool({
-  connectionString: "postgresql://neondb_owner:npg_oA1JpiysN4MV@ep-sweet-cake-a12b2r6b-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false,
   },
 });
 
-// Identify endpoint
+/*
+ROOT ENDPOINT
+*/
+app.get("/", (req, res) => {
+  res.send("Bitespeed Identity Reconciliation API is running");
+});
+
+/*
+IDENTIFY ENDPOINT
+*/
 app.post("/identify", async (req, res) => {
   try {
     const { email, phoneNumber } = req.body;
 
     if (!email && !phoneNumber) {
-      return res.status(400).json({ error: "Email or phoneNumber required" });
+      return res.status(400).json({
+        error: "email or phoneNumber required",
+      });
     }
 
-    // Find existing contacts
-    const result = await pool.query(
-      `SELECT * FROM Contact 
-       WHERE email = $1 OR phoneNumber = $2
-       ORDER BY createdAt ASC`,
+    /*
+    FIND EXISTING CONTACT
+    */
+    const existing = await pool.query(
+      `
+      SELECT * FROM Contact
+      WHERE email = $1 OR phoneNumber = $2
+      ORDER BY createdAt ASC
+      `,
       [email, phoneNumber]
     );
 
-    let contacts = result.rows;
-
     let primaryContact;
 
-    if (contacts.length === 0) {
-      // Create new primary contact
-      const insert = await pool.query(
-        `INSERT INTO Contact (email, phoneNumber, linkPrecedence)
-         VALUES ($1, $2, 'primary')
-         RETURNING *`,
+    /*
+    IF NO CONTACT EXISTS
+    CREATE PRIMARY CONTACT
+    */
+    if (existing.rows.length === 0) {
+      const newContact = await pool.query(
+        `
+        INSERT INTO Contact
+        (email, phoneNumber, linkPrecedence)
+        VALUES ($1,$2,'primary')
+        RETURNING *
+        `,
         [email, phoneNumber]
       );
 
-      primaryContact = insert.rows[0];
-      contacts = [primaryContact];
+      primaryContact = newContact.rows[0];
     } else {
-      primaryContact =
-        contacts.find((c) => c.linkprecedence === "primary") || contacts[0];
-
-      // Check if new info provided
-      const exists = contacts.some(
-        (c) => c.email === email && c.phonenumber === phoneNumber
-      );
-
-      if (!exists) {
-        const secondary = await pool.query(
-          `INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence)
-           VALUES ($1, $2, $3, 'secondary')
-           RETURNING *`,
-          [email, phoneNumber, primaryContact.id]
-        );
-
-        contacts.push(secondary.rows[0]);
-      }
+      primaryContact = existing.rows[0];
     }
 
-    // Collect response data
-    const primaryId = primaryContact.id;
-
-    const allContacts = await pool.query(
-      `SELECT * FROM Contact
-       WHERE id = $1 OR linkedId = $1`,
-      [primaryId]
+    /*
+    GET ALL LINKED CONTACTS
+    */
+    const linked = await pool.query(
+      `
+      SELECT * FROM Contact
+      WHERE id = $1 OR linkedId = $1
+      `,
+      [primaryContact.id]
     );
 
-    const emails = [...new Set(allContacts.rows.map((c) => c.email).filter(Boolean))];
-    const phoneNumbers = [
-      ...new Set(allContacts.rows.map((c) => c.phonenumber).filter(Boolean)),
-    ];
-    const secondaryContactIds = allContacts.rows
-      .filter((c) => c.linkprecedence === "secondary")
-      .map((c) => c.id);
+    const emails = [...new Set(linked.rows.map(c => c.email).filter(Boolean))];
+    const phones = [...new Set(linked.rows.map(c => c.phonenumber).filter(Boolean))];
+    const secondaryIds = linked.rows
+      .filter(c => c.linkprecedence === "secondary")
+      .map(c => c.id);
 
     res.json({
       contact: {
-        primaryContactId: primaryId,
+        primaryContactId: primaryContact.id,
         emails,
-        phoneNumbers,
-        secondaryContactIds,
+        phoneNumbers: phones,
+        secondaryContactIds: secondaryIds,
       },
     });
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 
-// Start server
+/*
+IMPORTANT: USE RENDER PORT
+*/
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("Server running on port", PORT);
 });
