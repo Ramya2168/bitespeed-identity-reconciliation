@@ -3,8 +3,11 @@ const { Pool } = require("pg");
 const cors = require("cors");
 
 const app = express();
-app.use(express.json());
+
+/* Middleware */
 app.use(cors());
+app.use(express.json());
+
 /*
 DATABASE CONNECTION
 Render environment variable name = DATABASE_URL
@@ -36,9 +39,6 @@ app.post("/identify", async (req, res) => {
       });
     }
 
-    /*
-    FIND EXISTING CONTACT
-    */
     const existing = await pool.query(
       `
       SELECT * FROM Contact
@@ -50,15 +50,10 @@ app.post("/identify", async (req, res) => {
 
     let primaryContact;
 
-    /*
-    IF NO CONTACT EXISTS
-    CREATE PRIMARY CONTACT
-    */
     if (existing.rows.length === 0) {
       const newContact = await pool.query(
         `
-        INSERT INTO Contact
-        (email, phoneNumber, linkPrecedence)
+        INSERT INTO Contact (email, phoneNumber, linkPrecedence)
         VALUES ($1,$2,'primary')
         RETURNING *
         `,
@@ -70,9 +65,6 @@ app.post("/identify", async (req, res) => {
       primaryContact = existing.rows[0];
     }
 
-    /*
-    GET ALL LINKED CONTACTS
-    */
     const linked = await pool.query(
       `
       SELECT * FROM Contact
@@ -105,7 +97,7 @@ app.post("/identify", async (req, res) => {
 });
 
 /*
-IMPORTANT: USE RENDER PORT
+USE RENDER PORT
 */
 const PORT = process.env.PORT || 3000;
 
